@@ -1,5 +1,6 @@
 package com.philipphecht;
 
+import com.facebook.common.file.FileUtils;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
@@ -31,6 +32,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Locale;
+
 import android.support.v4.content.FileProvider;
 
 import android.content.ActivityNotFoundException;
@@ -38,6 +41,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.text.TextUtils;
 import android.webkit.CookieManager;
 import android.webkit.MimeTypeMap;
 import android.widget.Toast;
@@ -45,91 +49,164 @@ import android.util.Log;
 import android.webkit.WebView;
 
 public class RNDocViewerModule extends ReactContextBaseJavaModule {
-  public static final int ERROR_NO_HANDLER_FOR_DATA_TYPE = 53;
-  public static final int ERROR_FILE_NOT_FOUND = 2;
-  public static final int ERROR_UNKNOWN_ERROR = 1;
-  private final ReactApplicationContext reactContext;
+    public static final int ERROR_NO_HANDLER_FOR_DATA_TYPE = 53;
+    public static final int ERROR_FILE_NOT_FOUND = 2;
+    public static final int ERROR_UNKNOWN_ERROR = 1;
+    private final ReactApplicationContext reactContext;
+    private static final String[][] MIME_MapTable = {
+            //{后缀名， MIME类型}
+            {".3gp", "video/3gpp"},
+            {".apk", "application/vnd.android.package-archive"},
+            {".asf", "video/x-ms-asf"},
+            {".avi", "video/x-msvideo"},
+            {".bin", "application/octet-stream"},
+            {".bmp", "image/bmp"},
+            {".c", "text/plain"},
+            {".class", "application/octet-stream"},
+            {".conf", "text/plain"},
+            {".cpp", "text/plain"},
+            {".doc", "application/msword"},
+            {".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
+            {".xls", "application/vnd.ms-excel"},
+            {".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
+            {".exe", "application/octet-stream"},
+            {".gif", "image/gif"},
+            {".gtar", "application/x-gtar"},
+            {".gz", "application/x-gzip"},
+            {".h", "text/plain"},
+            {".htm", "text/html"},
+            {".html", "text/html"},
+            {".jar", "application/java-archive"},
+            {".java", "text/plain"},
+            {".jpeg", "image/jpeg"},
+            {".jpg", "image/jpeg"},
+            {".js", "application/x-javascript"},
+            {".log", "text/plain"},
+            {".m3u", "audio/x-mpegurl"},
+            {".m4a", "audio/mp4a-latm"},
+            {".m4b", "audio/mp4a-latm"},
+            {".m4p", "audio/mp4a-latm"},
+            {".m4u", "video/vnd.mpegurl"},
+            {".m4v", "video/x-m4v"},
+            {".mov", "video/quicktime"},
+            {".mp2", "audio/x-mpeg"},
+            {".mp3", "audio/x-mpeg"},
+            {".mp4", "video/mp4"},
+            {".mpc", "application/vnd.mpohun.certificate"},
+            {".mpe", "video/mpeg"},
+            {".mpeg", "video/mpeg"},
+            {".mpg", "video/mpeg"},
+            {".mpg4", "video/mp4"},
+            {".mpga", "audio/mpeg"},
+            {".msg", "application/vnd.ms-outlook"},
+            {".ogg", "audio/ogg"},
+            {".pdf", "application/pdf"},
+            {".png", "image/png"},
+            {".pps", "application/vnd.ms-powerpoint"},
+            {".ppt", "application/vnd.ms-powerpoint"},
+            {".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"},
+            {".prop", "text/plain"},
+            {".rc", "text/plain"},
+            {".rmvb", "audio/x-pn-realaudio"},
+            {".rtf", "application/rtf"},
+            {".sh", "text/plain"},
+            {".tar", "application/x-tar"},
+            {".tgz", "application/x-compressed"},
+            {".txt", "text/plain"},
+            {".wav", "audio/x-wav"},
+            {".wma", "audio/x-ms-wma"},
+            {".wmv", "audio/x-ms-wmv"},
+            {".wps", "application/vnd.ms-works"},
+            {".xml", "text/plain"},
+            {".z", "application/x-compress"},
+            {".zip", "application/x-zip-compressed"},
+            {"", "*/*"}
+    };
 
-  public RNDocViewerModule(ReactApplicationContext reactContext) {
-    super(reactContext);
-    this.reactContext = reactContext;
-  }
+    public RNDocViewerModule(ReactApplicationContext reactContext) {
+        super(reactContext);
+        this.reactContext = reactContext;
+    }
 
-  @Override
-  public String getName() {
-    return "RNDocViewer";
-  }
+    @Override
+    public String getName() {
+        return "RNDocViewer";
+    }
 
-  @ReactMethod
-  public void openDoc(ReadableArray args, Callback callback) {
-      final ReadableMap arg_object = args.getMap(0);
-      try {
-        if (arg_object.getString("url") != null && arg_object.getString("fileName") != null) {
-            // parameter parsing
-            final String url = arg_object.getString("url");
-            final String fileName =arg_object.getString("fileName");
-            final String fileType =arg_object.getString("fileType");
-            final Boolean cache =arg_object.getBoolean("cache");
-            final byte[] bytesData = new byte[0];
-            // Begin the Download Task
-            new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
-        }else{
-            callback.invoke(false);
-        }
-       } catch (Exception e) {
+    @ReactMethod
+    public void openDoc(ReadableArray args, Callback callback) {
+        final ReadableMap arg_object = args.getMap(0);
+        try {
+            if (arg_object.getString("url") != null && arg_object.getString("fileName") != null) {
+                // parameter parsing
+                System.out.println("openDoc--》" + args);
+                final String url = arg_object.getString("url");
+                final String fileName = arg_object.getString("fileName");
+                final String fileType = arg_object.getString("fileType");
+                final Boolean cache = arg_object.getBoolean("cache");
+                final byte[] bytesData = new byte[0];
+                // Begin the Download Task
+                new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
+            } else {
+                System.out.println("openDoc null");
+                callback.invoke(false);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
             callback.invoke(e.getMessage());
-       }
-  }
-
-
-  @ReactMethod
-  public void openDocb64(ReadableArray args, Callback callback) {
-      final ReadableMap arg_object = args.getMap(0);
-      try {
-        if (arg_object.getString("base64") != null && arg_object.getString("fileName") != null && arg_object.getString("fileType") != null) {
-            // parameter parsing
-            final String base64 = arg_object.getString("base64");
-            final String fileName =arg_object.getString("fileName");
-            final String fileType =arg_object.getString("fileType");
-            final Boolean cache = arg_object.getBoolean("cache");
-            //Bytes
-            final byte[] bytesData = android.util.Base64.decode(base64,android.util.Base64.DEFAULT);
-            System.out.println("BytesData" + bytesData);
-            // Begin the Download Task
-            new FileDownloaderAsyncTask(callback, "", cache, fileName, fileType, bytesData).execute();
-        }else{
-            callback.invoke(false);
         }
-       } catch (Exception e) {
+    }
+
+
+    @ReactMethod
+    public void openDocb64(ReadableArray args, Callback callback) {
+        final ReadableMap arg_object = args.getMap(0);
+        try {
+            if (arg_object.getString("base64") != null && arg_object.getString("fileName") != null && arg_object.getString("fileType") != null) {
+                // parameter parsing
+                final String base64 = arg_object.getString("base64");
+                final String fileName = arg_object.getString("fileName");
+                final String fileType = arg_object.getString("fileType");
+                final Boolean cache = arg_object.getBoolean("cache");
+                //Bytes
+                final byte[] bytesData = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                System.out.println("BytesData" + bytesData);
+                // Begin the Download Task
+                new FileDownloaderAsyncTask(callback, "", cache, fileName, fileType, bytesData).execute();
+            } else {
+                callback.invoke(false);
+            }
+        } catch (Exception e) {
             callback.invoke(e.getMessage());
-       }
-
-
-  }
-
-  @ReactMethod
-  public void openDocBinaryinUrl(ReadableArray args, Callback callback) {
-      final ReadableMap arg_object = args.getMap(0);
-      try {
-        if (arg_object.getString("url") != null && arg_object.getString("fileName") != null && arg_object.getString("fileType") != null) {
-            // parameter parsing
-            final String url = arg_object.getString("url");
-            final String fileName =arg_object.getString("fileName");
-            final String fileType =arg_object.getString("fileType");
-            final Boolean cache =arg_object.getBoolean("cache");
-            final byte[] bytesData = new byte[0];
-            // Begin the Download Task
-            new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
-        }else{
-            callback.invoke(false);
         }
-       } catch (Exception e) {
+
+
+    }
+
+    @ReactMethod
+    public void openDocBinaryinUrl(ReadableArray args, Callback callback) {
+        final ReadableMap arg_object = args.getMap(0);
+        try {
+            if (arg_object.getString("url") != null && arg_object.getString("fileName") != null && arg_object.getString("fileType") != null) {
+                // parameter parsing
+                final String url = arg_object.getString("url");
+                final String fileName = arg_object.getString("fileName");
+                final String fileType = arg_object.getString("fileType");
+                final Boolean cache = arg_object.getBoolean("cache");
+                final byte[] bytesData = new byte[0];
+                // Begin the Download Task
+                new FileDownloaderAsyncTask(callback, url, cache, fileName, fileType, bytesData).execute();
+            } else {
+                callback.invoke(false);
+            }
+        } catch (Exception e) {
             callback.invoke(e.getMessage());
-       }
-  }
+        }
+    }
 
     // used for all downloaded files, so we can find and delete them again.
     private final static String FILE_TYPE_PREFIX = "PP_";
+
     /**
      * downloads the file from the given url to external storage.
      *
@@ -141,7 +218,7 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
         try {
             Context context = getReactApplicationContext().getBaseContext();
             File outputDir = context.getCacheDir();
-            if(bytesData.length > 0){
+            if (bytesData.length > 0) {
                 // use cache
                 File f = cache != null && cache ? new File(outputDir, fileName) : File.createTempFile(FILE_TYPE_PREFIX, "." + fileType,
                         outputDir);
@@ -169,7 +246,7 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
                     }
                 }
                 return f;
-            }else{
+            } else {
                 String extension = MimeTypeMap.getFileExtensionFromUrl(url);
                 System.out.println("Extensions DownloadFile " + extension);
                 if (extension.equals("") && fileType.equals("")) {
@@ -182,14 +259,14 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
                     System.out.println("extension (default): " + extension);
                 }
 
-                 // check has extension
-                if (fileName.indexOf("\\.") == -1){
+                // check has extension
+                if (fileName.indexOf("\\.") == -1) {
                     fileName = fileName + '.' + extension;
                 }
                 // if use cache, check exist
                 if (cache != null && cache) {
                     File existFile = new File(outputDir, fileName);
-                    if (existFile.exists()){
+                    if (existFile.exists()) {
                         return existFile;
                     }
                 }
@@ -259,8 +336,6 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
             }
 
 
-
-
         } catch (FileNotFoundException e) {
             e.printStackTrace();
             callback.invoke(ERROR_FILE_NOT_FOUND);
@@ -271,6 +346,7 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
             return null;
         }
     }
+
     private File copyFile(InputStream in, String fileName, Boolean cache, String fileType, byte[] bytesData, Callback callback) {
 
         try {
@@ -381,7 +457,8 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
             return null;
         }
     }
-     /**
+
+    /**
      * Returns the MIME Type of the file by looking at file name extension in
      * the URL.
      *
@@ -405,7 +482,7 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
         return mimeType;
     }
 
-  private class FileDownloaderAsyncTask extends AsyncTask<Void, Void, File> {
+    private class FileDownloaderAsyncTask extends AsyncTask<Void, Void, File> {
         private final Callback callback;
         private final String url;
         private final String fileName;
@@ -414,7 +491,7 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
         private final byte[] bytesData;
 
         public FileDownloaderAsyncTask(Callback callback,
-                String url, Boolean cache, String fileName, String fileType, byte[] bytesData) {
+                                       String url, Boolean cache, String fileName, String fileType, byte[] bytesData) {
             super();
             this.callback = callback;
             this.url = url;
@@ -427,6 +504,7 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
         @Override
         protected File doInBackground(Void... arg0) {
             if (url.startsWith("content://")) {
+                System.out.println("doInBackground content to download" + url);
                 File file = null;
                 try {
                     InputStream in = getCurrentActivity().getContentResolver().openInputStream(Uri.parse(url));
@@ -434,42 +512,48 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
                 } catch (FileNotFoundException e) {
                     System.out.println(e);
                 }
-                return  file;
+                return file;
             } else if (!url.startsWith("file://")) {
-                System.out.println("Url to download" + url);
+                System.out.println("doInBackground file Url to download" + url);
                 return downloadFile(url, fileName, cache, fileType, bytesData, callback);
             } else {
+                System.out.println("doInBackground new file Url to download" + url);
                 return new File(url.replace("file://", ""));
             }
         }
 
         @Override
         protected void onPostExecute(File result) {
+            System.out.println("onPostExecute 1");
             if (result == null) {
                 // Has already been handled
                 return;
             }
-
+            System.out.println("onPostExecute 2");
             Context context = getCurrentActivity();
-           String mimeType;
+            String mimeType;
             // mime type of file data
-            if (fileType != null) {
-                // If file type is already specified, should just take the mimeType from it
-                mimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(fileType);
-            } else {
-              mimeType = getMimeType(url);
-            }
+//            if (fileType != null) {
+            // If file type is already specified, should just take the mimeType from it
+            mimeType = getMIMEType(url);
+            System.out.println("onPostExecute 3" + mimeType);
+            System.out.println("onPostExecute 3" + context);
+//            } else {
+//              mimeType = getMimeType(url);
+//                System.out.println("onPostExecute 4"+ mimeType);
+//            }
             if (mimeType == null || context == null) {
                 return;
             }
+            System.out.println("onPostExecute 5");
             try {
 
-                Uri contentUri = FileProvider.getUriForFile(context, reactContext.getPackageName()+".docViewer_provider", result);
+                Uri contentUri = FileProvider.getUriForFile(context, reactContext.getPackageName() + ".docViewer_provider", result);
                 System.out.println("ContentUri");
                 System.out.println(contentUri);
-
+                System.out.println("onPostExecute 6");
                 Intent intent = new Intent(Intent.ACTION_VIEW);
-                intent.setDataAndType(contentUri, mimeType);
+                intent.setDataAndType(contentUri, getMIMEType(url));
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
@@ -481,6 +565,7 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
                     activityNotFoundMessage("Activity not found to handle: " + contentUri.toString() + " (" + mimeType + ")");
                 }
             } catch (ActivityNotFoundException e) {
+                e.printStackTrace();
                 activityNotFoundMessage(e.getMessage());
             }
 
@@ -492,5 +577,31 @@ public class RNDocViewerModule extends ReactContextBaseJavaModule {
             callback.invoke(message);
             //e.printStackTrace();
         }
+    }
+
+    /**
+     * 根据文件后缀名获得对应的MIME类型。
+     */
+    public static String getMIMEType(String fName) {
+        String type = "*/*";
+
+        //获取后缀名前的分隔符"."在fName中的位置。
+        int dotIndex = fName.lastIndexOf(".");
+        if (dotIndex < 0) {
+            return type;
+        }
+
+        /* 获取文件的后缀名 */
+        String end = fName.substring(dotIndex, fName.length()).toLowerCase(Locale.getDefault());
+        if (TextUtils.isEmpty(end)) {
+            return type;
+        }
+
+        //在MIME和文件类型的匹配表中找到对应的MIME类型。
+        for (int i = 0; i < MIME_MapTable.length; i++) {
+            if (end.equals(MIME_MapTable[i][0]))
+                type = MIME_MapTable[i][1];
+        }
+        return type;
     }
 }
